@@ -3,6 +3,8 @@
 mod audio;
 mod tray;
 
+use std::process;
+
 use anyhow::{anyhow, Result};
 use audio::AudioDevice;
 use tao::{
@@ -127,8 +129,12 @@ fn main() -> Result<()> {
     event_loop.run(
         move |event, _, control_flow: &mut tao::event_loop::ControlFlow| {
             // println!("{event:?}, {:?}", std::thread::current().name());
-            if let Event::UserEvent(_) = event {
-                handler.toggle().expect("toggle failed");
+            if let Event::UserEvent(event) = event {
+                match event.click_type {
+                    tray_icon::ClickType::Left => handler.toggle().expect("toggle failed"),
+                    tray_icon::ClickType::Right => process::exit(0),
+                    _ => (),
+                }
             }
             *control_flow = ControlFlow::Wait;
         },
