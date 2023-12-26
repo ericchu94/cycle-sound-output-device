@@ -11,7 +11,7 @@ use tao::{
     event::Event,
     event_loop::{ControlFlow, EventLoop, EventLoopBuilder},
 };
-use tray_icon::TrayIconEvent;
+use tray_icon::{Icon, TrayIconEvent};
 
 use crate::{audio::AudioInterface, tray::TrayManager};
 
@@ -23,18 +23,6 @@ pub(crate) enum OutputDevice {
     Speakers,
     Headphones,
     Unknown,
-}
-
-impl OutputDevice {
-    pub(crate) fn icon_bytes(&self) -> &[u8] {
-        let bytes = match self {
-            OutputDevice::Speakers => include_bytes!("speakers.ico").as_slice(),
-            OutputDevice::Headphones => include_bytes!("headphones.ico").as_slice(),
-            _ => include_bytes!("unknown.ico").as_slice(),
-        };
-
-        bytes
-    }
 }
 
 struct Handler {
@@ -85,7 +73,10 @@ impl Handler {
     }
 
     fn update_icon(&self) -> Result<()> {
-        self.tray_manager.set_icon(self.output_device()?)?;
+        let cur = self.audio_interface.get_default_output_device()?;
+
+        self.tray_manager
+            .set_icon(Icon::from_handle(cur.icon_handle()?.0))?;
 
         Ok(())
     }

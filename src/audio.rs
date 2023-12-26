@@ -3,7 +3,7 @@ use com_policy_config::{IPolicyConfig, PolicyConfigClient};
 use windows::{
     core::PCWSTR,
     Win32::{
-        Devices::FunctionDiscovery::PKEY_Device_FriendlyName,
+        Devices::FunctionDiscovery::{PKEY_DeviceClass_IconPath, PKEY_Device_FriendlyName},
         Media::Audio::{
             eCommunications, eConsole, eMultimedia, eRender, IMMDevice, IMMDeviceEnumerator,
             MMDeviceEnumerator, DEVICE_STATE_ACTIVE,
@@ -11,6 +11,10 @@ use windows::{
         System::Com::{
             CoCreateInstance, CoInitialize, StructuredStorage::PropVariantToStringAlloc,
             CLSCTX_ALL, STGM_READ,
+        },
+        UI::{
+            Shell::{ExtractIconExW, PathParseIconLocationW},
+            WindowsAndMessaging::HICON,
         },
     },
 };
@@ -25,9 +29,28 @@ impl AudioDevice {
     pub(crate) fn device_friendly_name(&self) -> Result<String> {
         unsafe {
             let store = self.0.OpenPropertyStore(STGM_READ)?;
+
+            self.icon_handle()?;
+
             let variant = store.GetValue(&PKEY_Device_FriendlyName)?;
             let pwstr = PropVariantToStringAlloc(&variant)?;
             Ok(pwstr.to_string()?)
+        }
+    }
+
+    pub(crate) fn icon_handle(&self) -> Result<HICON> {
+        unsafe {
+            let store = self.0.OpenPropertyStore(STGM_READ)?;
+
+            let icon = store.GetValue(&PKEY_DeviceClass_IconPath)?;
+            let icon_path = PropVariantToStringAlloc(&icon)?;
+            let icon_index = PathParseIconLocationW(icon_path);
+
+            let mut large = HICON::default();
+
+            ExtractIconExW(PCWSTR(icon_path.0), icon_index, Some(&mut large), None, 1);
+
+            Ok(large)
         }
     }
 }
