@@ -18,18 +18,10 @@ use crate::{audio::AudioInterface, tray::TrayManager};
 const SPEAKERS: &str = "Speakers (High Definition Audio Device)";
 const HEADPHONES: &str = "DELL S3422DWG (NVIDIA High Definition Audio)";
 
-#[derive(PartialEq, Eq)]
-pub(crate) enum OutputDevice {
-    Speakers,
-    Headphones,
-    Unknown,
-}
-
 struct Handler {
     tray_manager: TrayManager,
     audio_interface: AudioInterface,
-    speakers: AudioDevice,
-    headphones: AudioDevice,
+    selected_devices: Vec<AudioDevice>,
 }
 
 impl Handler {
@@ -58,13 +50,14 @@ impl Handler {
             .next()
             .ok_or(anyhow!("Speakers not found"))?;
 
+        let selected_devices = vec![headphones, speakers];
+
         let tray_manager = TrayManager::new()?;
 
         let handler = Self {
             tray_manager,
             audio_interface,
-            speakers,
-            headphones,
+            selected_devices,
         };
 
         handler.update_icon()?;
@@ -81,28 +74,18 @@ impl Handler {
         Ok(())
     }
 
-    fn output_device(&self) -> Result<OutputDevice> {
+    fn next_device(&mut self) -> Result<()> {
         let cur = self.audio_interface.get_default_output_device()?;
 
-        let device = if cur == self.speakers {
-            OutputDevice::Speakers
-        } else if cur == self.headphones {
-            OutputDevice::Headphones
-        } else {
-            OutputDevice::Unknown
-        };
+        let index: usize = self
+            .selected_devices
+            .iter()
+            .position(|x| x == &cur)
+            .unwrap_or(0);
+        let next = (index + 1) % self.selected_devices.len();
 
-        Ok(device)
-    }
-
-    fn toggle(&self) -> Result<()> {
-        let next = if self.output_device()? == OutputDevice::Speakers {
-            &self.headphones
-        } else {
-            &self.speakers
-        };
-
-        self.audio_interface.set_default_output_device(next)?;
+        self.audio_interface
+            .set_default_output_device(&self.selected_devices[next])?;
         self.update_icon()
     }
 }
@@ -115,14 +98,16 @@ fn main() -> Result<()> {
         proxy.send_event(e).expect("send event failed");
     }));
 
-    let handler = Handler::new()?;
+    let mut handler = Handler::new()?;
 
     event_loop.run(
         move |event, _, control_flow: &mut tao::event_loop::ControlFlow| {
             // println!("{event:?}, {:?}", std::thread::current().name());
             if let Event::UserEvent(event) = event {
                 match event.click_type {
-                    tray_icon::ClickType::Left => handler.toggle().expect("toggle failed"),
+                    tray_icon::ClickType::Left => {
+                        handler.next_device().expect("next device failed")
+                    }
                     tray_icon::ClickType::Right => process::exit(0),
                     _ => (),
                 }
