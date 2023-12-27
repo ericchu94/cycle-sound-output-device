@@ -1,7 +1,7 @@
 use anyhow::Result;
 
 use tray_icon::{
-    menu::{CheckMenuItem, Menu, MenuItem, MenuId},
+    menu::{CheckMenuItem, Menu, MenuId, MenuItem},
     Icon, TrayIcon, TrayIconBuilder,
 };
 
