@@ -1,68 +1,34 @@
 #![windows_subsystem = "windows"]
 
 mod audio;
+mod cache;
 mod tray;
 
-use std::{collections::HashMap, process};
+use std::{collections::HashSet, process};
 
-use anyhow::{anyhow, Result};
-use audio::AudioDevice;
+use anyhow::Result;
 use tao::{
     event::Event,
     event_loop::{ControlFlow, EventLoop, EventLoopBuilder},
 };
-use tray_icon::{
-    menu::{MenuEvent, MenuId},
-    ClickType, Icon, TrayIconEvent,
-};
+use tray_icon::{menu::MenuEvent, ClickType, Icon, TrayIconEvent};
 
 use crate::{audio::AudioInterface, tray::TrayManager};
-
-const SPEAKERS: &str = "Speakers (High Definition Audio Device)";
-const HEADPHONES: &str = "DELL S3422DWG (NVIDIA High Definition Audio)";
 
 struct Handler {
     tray_manager: TrayManager,
     audio_interface: AudioInterface,
-    selected_devices: Vec<AudioDevice>,
-    all_devices: HashMap<MenuId, AudioDevice>,
 }
 
 impl Handler {
     fn new() -> Result<Self> {
         let audio_interface = AudioInterface::new()?;
 
-        let headphones = audio_interface
-            .get_output_devices()?
-            .into_iter()
-            .filter(|x| {
-                x.device_friendly_name()
-                    .map(|name| name == HEADPHONES)
-                    .unwrap_or(false)
-            })
-            .next()
-            .ok_or(anyhow!("Headphones not found"))?;
-
-        let speakers = audio_interface
-            .get_output_devices()?
-            .into_iter()
-            .filter(|x| {
-                x.device_friendly_name()
-                    .map(|name| name == SPEAKERS)
-                    .unwrap_or(false)
-            })
-            .next()
-            .ok_or(anyhow!("Speakers not found"))?;
-
-        let selected_devices = vec![headphones, speakers];
-
         let tray_manager = TrayManager::new()?;
 
-        let mut handler = Self {
+        let handler = Self {
             tray_manager,
             audio_interface,
-            selected_devices,
-            all_devices: HashMap::default(),
         };
 
         handler.update()?;
@@ -80,18 +46,26 @@ impl Handler {
     }
 
     fn next_device(&mut self) -> Result<()> {
-        if self.selected_devices.len() > 0 {
-            let cur = self.audio_interface.get_default_output_device()?;
+        let selected_devices = cache::get_selected_devices()?;
+        let all_devices = self
+            .audio_interface
+            .get_output_devices()?
+            .into_iter()
+            .map(|d| d.id())
+            .collect::<Result<HashSet<String>>>()?;
+        let devices = selected_devices
+            .into_iter()
+            .filter(|d| all_devices.contains(d))
+            .collect::<Vec<String>>();
 
-            let index: usize = self
-                .selected_devices
-                .iter()
-                .position(|x| x == &cur)
-                .unwrap_or(0);
-            let next = (index + 1) % self.selected_devices.len();
+        if devices.len() > 0 {
+            let cur = self.audio_interface.get_default_output_device()?.id()?;
+
+            let index: usize = devices.iter().position(|x| x == &cur).unwrap_or(0);
+            let next = (index + 1) % devices.len();
 
             self.audio_interface
-                .set_default_output_device(&self.selected_devices[next])?;
+                .set_default_output_device(&devices[next])?;
 
             self.update()?;
         }
@@ -99,36 +73,42 @@ impl Handler {
         Ok(())
     }
 
-    fn update_tray_menu(&mut self) -> Result<()> {
+    fn update_tray_menu(&self) -> Result<()> {
         let devices = self.audio_interface.get_output_devices()?;
+        let selected_devices = cache::get_selected_devices()?;
 
-        self.all_devices = devices
+        let devices = devices
             .into_iter()
-            .enumerate()
-            .map(|(i, d)| (MenuId::from(i), d))
-            .collect();
-
-        let mut devices = self
-            .all_devices
-            .iter()
-            .map(|(id, d)| {
-                d.device_friendly_name()
-                    .map(|name| (name, self.selected_devices.contains(&d), id.to_owned()))
+            .map(|d| {
+                let id = d.id()?;
+                let name = d.device_friendly_name()?;
+                let selected = selected_devices.contains(&id);
+                Ok((id, name, selected))
             })
-            .collect::<Result<Vec<(String, bool, MenuId)>>>()?;
-        devices.sort_unstable();
-        devices.reverse();
+            .collect::<Result<Vec<(String, String, bool)>>>()?;
 
         self.tray_manager.update_check_menu(devices)?;
 
         Ok(())
     }
 
-    fn update(&mut self) -> Result<()> {
+    fn update(&self) -> Result<()> {
         self.update_icon()?;
         self.update_tray_menu()?;
 
         Ok(())
+    }
+
+    fn device_clicked(&self, id: String) -> Result<()> {
+        let mut selected = cache::get_selected_devices()?;
+        if let Some(index) = selected.iter().position(|x| x == &id) {
+            selected.remove(index);
+        } else {
+            selected.push(id);
+        }
+        cache::set_selected_devices(selected)?;
+
+        self.update()
     }
 
     fn handle(&mut self, event: TrayMenuEvent) -> Result<()> {
@@ -144,14 +124,7 @@ impl Handler {
                     process::exit(0);
                 }
 
-                let d = &self.all_devices[&event.id];
-                if let Some(index) = self.selected_devices.iter().position(|x| x == d) {
-                    self.selected_devices.remove(index);
-                } else {
-                    self.selected_devices.push(d.clone());
-                }
-
-                self.update()?;
+                self.device_clicked(event.id.0)?;
             }
         }
 

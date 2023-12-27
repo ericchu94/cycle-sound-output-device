@@ -1,7 +1,7 @@
 use anyhow::Result;
 
 use tray_icon::{
-    menu::{CheckMenuItem, Menu, MenuId, MenuItem},
+    menu::{CheckMenuItem, Menu, MenuItem},
     Icon, TrayIcon, TrayIconBuilder,
 };
 
@@ -31,11 +31,11 @@ impl TrayManager {
         Ok(())
     }
 
-    pub(crate) fn update_check_menu(&self, devices: Vec<(String, bool, MenuId)>) -> Result<()> {
+    pub(crate) fn update_check_menu(&self, devices: Vec<(String, String, bool)>) -> Result<()> {
         for _ in 1..self.menu.items().len() {
             self.menu.remove_at(0);
         }
-        for (text, checked, id) in devices {
+        for (id, text, checked) in devices {
             self.menu
                 .prepend(&CheckMenuItem::with_id(id, text, true, checked, None))?;
         }

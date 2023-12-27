@@ -1,7 +1,7 @@
 use anyhow::Result;
 use com_policy_config::{IPolicyConfig, PolicyConfigClient};
 use windows::{
-    core::PCWSTR,
+    core::{HSTRING, PCWSTR},
     Win32::{
         Devices::FunctionDiscovery::{PKEY_DeviceClass_IconPath, PKEY_Device_FriendlyName},
         Media::Audio::{
@@ -23,8 +23,8 @@ use windows::{
 pub(crate) struct AudioDevice(IMMDevice);
 
 impl AudioDevice {
-    fn get_id(&self) -> Result<PCWSTR> {
-        unsafe { Ok(PCWSTR(self.0.GetId()?.0)) }
+    pub(crate) fn id(&self) -> Result<String> {
+        unsafe { Ok(self.0.GetId()?.to_string()?) }
     }
 
     pub(crate) fn device_friendly_name(&self) -> Result<String> {
@@ -94,11 +94,11 @@ impl AudioInterface {
         }
     }
 
-    pub(crate) fn set_default_output_device(&self, device: &AudioDevice) -> Result<()> {
+    pub(crate) fn set_default_output_device(&self, id: &str) -> Result<()> {
         unsafe {
             for role in [eConsole, eMultimedia, eCommunications] {
                 self.policy_config
-                    .SetDefaultEndpoint(device.get_id()?, role)?;
+                    .SetDefaultEndpoint(&HSTRING::from(id), role)?;
             }
             Ok(())
         }
