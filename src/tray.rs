@@ -16,7 +16,7 @@ impl TrayManager {
         menu.append(&MenuItem::with_id("exit", "Exit", true, None))?;
         let tray_icon = TrayIconBuilder::new()
             .with_menu(Box::new(menu.clone()))
-            .with_tooltip("Cycle Output Device")
+            .with_tooltip("Cycle Sound Output Device")
             .build()?;
 
         Ok(Self {
