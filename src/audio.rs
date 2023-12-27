@@ -19,6 +19,7 @@ use windows::{
     },
 };
 
+#[derive(Clone)]
 pub(crate) struct AudioDevice(IMMDevice);
 
 impl AudioDevice {
