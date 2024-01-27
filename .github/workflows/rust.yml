@@ -18,9 +18,9 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     - name: Build
-      run: cargo build --verbose
+      run: cargo build --release
     - name: Run tests
-      run: cargo test --verbose
+      run: cargo test
 
     - id: version
       uses: SebRollen/toml-action@v1.0.2
