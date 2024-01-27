@@ -16,7 +16,7 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - name: Build
-        run: cargo build --release
+        run: cargo build --release --message-format json
 
       - id: version
         uses: SebRollen/toml-action@v1.0.2
