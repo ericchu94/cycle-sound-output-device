@@ -16,10 +16,11 @@ jobs:
 
       - name: Version
         id: version
-        uses: dante-signal31/rust-app-version@v1.2.0
+        run: echo ::set-output name=version::$(awk -F\" '/^version/ {print $2}' Cargo.toml)
 
       - name: Release
         uses: ncipollo/release-action@v1.13.0
         with:
-          tag: ${{ steps.version.outposts.app_version }}
+          tag: ${{ steps.version.outposts.version }}
           artifacts: target/release/*.exe
+          commit: main
