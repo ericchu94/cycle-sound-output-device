@@ -18,11 +18,11 @@ jobs:
         uses: SebRollen/toml-action@v1.0.2
         with:
           file: Cargo.toml
-          field: version
+          field: package.version
         
       - name: Release
         uses: ncipollo/release-action@v1.13.0
         with:
-          tag: ${{ steps.version.outputs.value }}
+          tag: v${{ steps.version.outputs.value }}
           artifacts: target/release/*.exe
           commit: main
