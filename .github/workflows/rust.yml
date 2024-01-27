@@ -33,7 +33,7 @@ jobs:
       with:
         release-tag: v${{ steps.version.outputs.value }}
     - name: Release
-      if: steps.release-exists.outputs.release-exists == "false"
+      if: ${{ steps.release-exists.outputs.release-exists == "false" }}
       uses: ncipollo/release-action@v1.13.0
       with:
         tag: v${{ steps.version.outputs.value }}
