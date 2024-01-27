@@ -16,7 +16,7 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - name: Build
-        run: cargo build --release --message-format json
+        run: cargo build --release
 
       - id: version
         uses: SebRollen/toml-action@v1.0.2
@@ -24,9 +24,9 @@ jobs:
           file: Cargo.toml
           field: package.version
         
-      #- name: Release
-      #  uses: ncipollo/release-action@v1.13.0
-      #  with:
-      #    tag: v${{ steps.version.outputs.value }}
-      #    artifacts: target/release/*.exe
-      #    commit: main
+      - name: Release
+        uses: ncipollo/release-action@v1.13.0
+        with:
+          tag: v${{ steps.version.outputs.value }}
+          artifacts: target/*/release/*.exe
+          commit: main
