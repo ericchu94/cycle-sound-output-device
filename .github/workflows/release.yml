@@ -14,13 +14,15 @@ jobs:
       - name: Build
         run: cargo build --release
 
-      - name: Version
-        id: version
-        run: echo ::set-output name=version::$(awk -F\" '/^version/ {print $2}' Cargo.toml)
-
+      - id: version
+        uses: SebRollen/toml-action@v1.0.2
+        with:
+          file: Cargo.toml
+          field: version
+        
       - name: Release
         uses: ncipollo/release-action@v1.13.0
         with:
-          tag: ${{ steps.version.outposts.version }}
+          tag: ${{ steps.version.outputs.value }}
           artifacts: target/release/*.exe
           commit: main
