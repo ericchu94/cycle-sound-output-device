@@ -1,0 +1,25 @@
+name: release
+
+on:
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Build
+        run: cargo build --release
+
+      - name: Version
+        id: version
+        uses: dante-signal31/rust-app-version@v1.2.0
+
+      - name: Release
+        uses: ncipollo/release-action@v1.13.0
+        with:
+          tag: ${{ steps.version.outposts.app_version }}
+          artifacts: target/release/*.exe
