@@ -502,7 +502,7 @@ dependencies = [
 
 [[package]]
 name = "cycle-sound-output-device"
-version = "0.1.0"
+version = "0.1.2"
 dependencies = [
  "anyhow",
  "com-policy-config",
@@ -2181,8 +2181,9 @@ dependencies = [
 
 [[package]]
 name = "tray-icon"
-version = "0.11.1"
-source = "git+https://github.com/ericchu94/tray-icon.git#7467d7bd6a2b024784e121686ea0411c078b69fe"
+version = "0.11.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fd26786733426b0bf632ebab410c162859a911f26c7c9e208b9e329a8ca94481"
 dependencies = [
  "cocoa",
  "core-graphics",
