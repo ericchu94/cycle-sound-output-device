@@ -17,10 +17,6 @@ jobs:
       contents: write
 
     steps:
-    - name: tree
-      run: dir "makeappx.exe" /s
-      working-directory: "C:\\Program Files (x86)\\Windows Kits"
-      
     - uses: actions/checkout@v4
     - name: Build
       run: cargo build --release
