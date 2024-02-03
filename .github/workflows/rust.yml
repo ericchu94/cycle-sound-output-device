@@ -29,8 +29,8 @@ jobs:
         file: Cargo.toml
         field: package.name
 
-    - name: Set up MSIX Packaging
-      uses: microsoft/setup-msix-packaging-tools@v1.0.0
+    - name: tree
+      run: tree "C:\Program Files (x86)\Windows Kits"
 
     - name: Package MSIX App
       run: makeappx pack /d:target/*/release /p:${{ steps.name.outputs.value }}.msix
