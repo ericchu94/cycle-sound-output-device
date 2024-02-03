@@ -30,7 +30,7 @@ jobs:
         field: package.name
 
     - name: tree
-      run: tree "C:\Program Files (x86)\Windows Kits"
+      run: dir "\makeappx.exe" /s
 
     - name: Package MSIX App
       run: makeappx pack /d:target/*/release /p:${{ steps.name.outputs.value }}.msix
