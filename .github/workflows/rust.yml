@@ -3,6 +3,7 @@ name: Rust
 on:
   push:
     branches: [ "main" ]
+  workflow_dispatch:
 
 env:
   CARGO_TERM_COLOR: always
@@ -22,6 +23,18 @@ jobs:
     - name: Run tests
       run: cargo test
 
+    - id: name
+      uses: SebRollen/toml-action@v1.0.2
+      with:
+        file: Cargo.toml
+        field: package.name
+
+    - name: Set up MSIX Packaging
+      uses: microsoft/setup-msix-packaging-tools@v1.0.0
+
+    - name: Package MSIX App
+      run: makeappx pack /d:target/*/release /p:${{ steps.name.outputs.value }}.msix
+
     - id: version
       uses: SebRollen/toml-action@v1.0.2
       with:
@@ -37,5 +50,5 @@ jobs:
       uses: ncipollo/release-action@v1.13.0
       with:
         tag: v${{ steps.version.outputs.value }}
-        artifacts: target/*/release/*.exe
+        artifacts: target/*/release/*.exe,${{ steps.name.outputs.value }}.msix
         commit: main
