@@ -1,16 +1,17 @@
 use anyhow::Result;
 use com_policy_config::{IPolicyConfig, PolicyConfigClient};
 use windows::{
-    core::{HSTRING, PCWSTR},
+    core::{GUID, HSTRING, PCWSTR},
     Win32::{
         Devices::FunctionDiscovery::{PKEY_DeviceClass_IconPath, PKEY_Device_FriendlyName},
         Media::Audio::{
-            eCommunications, eConsole, eMultimedia, eRender, IMMDevice, IMMDeviceEnumerator,
-            MMDeviceEnumerator, DEVICE_STATE_ACTIVE,
+            eCapture, eCommunications, eConsole, eMultimedia, eRender,
+            Endpoints::IAudioEndpointVolume, IMMDevice, IMMDeviceEnumerator, MMDeviceEnumerator,
+            DEVICE_STATE_ACTIVE,
         },
         System::Com::{
-            CoCreateInstance, CoInitialize, StructuredStorage::PropVariantToStringAlloc,
-            CLSCTX_ALL, STGM_READ,
+            CoCreateInstance, CoInitializeEx, StructuredStorage::PropVariantToStringAlloc,
+            CLSCTX_ALL, COINIT_MULTITHREADED, STGM_READ,
         },
         UI::{
             Shell::{ExtractIconExW, PathParseIconLocationW},
@@ -54,6 +55,25 @@ impl AudioDevice {
             Ok(large)
         }
     }
+
+    pub(crate) fn volume(&self) -> Result<u8> {
+        unsafe {
+            let volume: IAudioEndpointVolume = self.0.Activate(CLSCTX_ALL, None)?;
+
+            Ok((volume.GetMasterVolumeLevelScalar()? * 100f32).round() as u8)
+        }
+    }
+
+    pub(crate) fn set_volume(&self, level: u8) -> Result<()> {
+        println!("Setting to {level}");
+        unsafe {
+            let volume: IAudioEndpointVolume = self.0.Activate(CLSCTX_ALL, None)?;
+
+            volume.SetMasterVolumeLevelScalar((level as f32) / 100f32, &GUID::zeroed())?;
+
+            Ok(())
+        }
+    }
 }
 
 impl PartialEq for AudioDevice {
@@ -73,7 +93,7 @@ pub(crate) struct AudioInterface {
 impl AudioInterface {
     pub(crate) fn new() -> Result<Self> {
         unsafe {
-            CoInitialize(None)?;
+            CoInitializeEx(None, COINIT_MULTITHREADED)?;
             let mm_device_enumerator = CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL)?;
             let policy_config = CoCreateInstance(&PolicyConfigClient, None, CLSCTX_ALL)?;
 
@@ -112,12 +132,34 @@ impl AudioInterface {
                 .EnumAudioEndpoints(eRender, state_mask)?;
             let count = device_collection.GetCount()?;
             Ok((0..count)
+                .map(|i| device_collection.Item(i).map(AudioDevice))
+                .collect::<std::result::Result<_, _>>()?)
+        }
+    }
+
+    pub(crate) fn get_input_devices(&self) -> Result<Vec<AudioDevice>> {
+        unsafe {
+            let state_mask = DEVICE_STATE_ACTIVE;
+            let device_collection = self
+                .mm_device_enumerator
+                .EnumAudioEndpoints(eCapture, state_mask)?;
+            let count = device_collection.GetCount()?;
+            Ok((0..count)
                 .map(|i| {
-                    device_collection
-                        .Item(i)
-                        .map(|mm_device| AudioDevice(mm_device))
+                    device_collection.Item(i).map(|mm_device| {
+                        println!("{:?}", mm_device);
+                        AudioDevice(mm_device)
+                    })
                 })
                 .collect::<std::result::Result<_, _>>()?)
+        }
+    }
+
+    pub(crate) fn get_device(&self, id: &str) -> Result<AudioDevice> {
+        unsafe {
+            let mm_device = self.mm_device_enumerator.GetDevice(&HSTRING::from(id))?;
+
+            Ok(AudioDevice(mm_device))
         }
     }
 }

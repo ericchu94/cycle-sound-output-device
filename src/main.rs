@@ -4,7 +4,12 @@ mod audio;
 mod cache;
 mod tray;
 
-use std::{collections::HashSet, process};
+use std::{
+    collections::{HashMap, HashSet},
+    process,
+    thread::{self, sleep},
+    time::Duration,
+};
 
 use anyhow::Result;
 use tao::{
@@ -46,7 +51,7 @@ impl Handler {
     }
 
     fn next_device(&mut self) -> Result<()> {
-        let selected_devices = cache::get_selected_devices()?;
+        let selected_devices = cache::get_selected_output_devices()?;
         let all_devices = self
             .audio_interface
             .get_output_devices()?
@@ -58,7 +63,7 @@ impl Handler {
             .filter(|d| all_devices.contains(d))
             .collect::<Vec<String>>();
 
-        if devices.len() > 0 {
+        if !devices.is_empty() {
             let cur = self.audio_interface.get_default_output_device()?.id()?;
 
             let index: usize = devices.iter().position(|x| x == &cur).unwrap_or(0);
@@ -74,20 +79,40 @@ impl Handler {
     }
 
     fn update_tray_menu(&self) -> Result<()> {
-        let devices = self.audio_interface.get_output_devices()?;
-        let selected_devices = cache::get_selected_devices()?;
-
-        let devices = devices
+        let output_devices = self.audio_interface.get_output_devices()?;
+        let selected_output_devices = cache::get_selected_output_devices()?
+            .into_iter()
+            .collect::<HashSet<_>>();
+        let output_devices = output_devices
             .into_iter()
             .map(|d| {
                 let id = d.id()?;
                 let name = d.device_friendly_name()?;
-                let selected = selected_devices.contains(&id);
+                let selected = selected_output_devices.contains(&id);
                 Ok((id, name, selected))
             })
             .collect::<Result<Vec<(String, String, bool)>>>()?;
 
-        self.tray_manager.update_check_menu(devices)?;
+        self.tray_manager.update_output_devices(output_devices)?;
+
+        let input_devices = self.audio_interface.get_input_devices()?;
+        let selected_input_devices = cache::get_selected_input_devices()?
+            .into_iter()
+            .map(|(id, _)| id)
+            .collect::<HashSet<_>>();
+        let input_devices = input_devices
+            .into_iter()
+            .map(|d| {
+                let id = d.id()?;
+                let name = d.device_friendly_name()?;
+                let volume = d.volume()?;
+                println!("{volume}");
+                let selected = selected_input_devices.contains(&id);
+                Ok((id, format!("{name} [{volume}]"), selected))
+            })
+            .collect::<Result<Vec<(String, String, bool)>>>()?;
+
+        self.tray_manager.update_input_devices(input_devices)?;
 
         Ok(())
     }
@@ -95,20 +120,49 @@ impl Handler {
     fn update(&self) -> Result<()> {
         self.update_icon()?;
         self.update_tray_menu()?;
+        self.apply_input_volume()?;
 
         Ok(())
     }
 
-    fn device_clicked(&self, id: String) -> Result<()> {
-        let mut selected = cache::get_selected_devices()?;
+    fn toggle_output_device(&self, id: String) -> Result<()> {
+        let mut selected = cache::get_selected_output_devices()?;
         if let Some(index) = selected.iter().position(|x| x == &id) {
             selected.remove(index);
         } else {
             selected.push(id);
         }
-        cache::set_selected_devices(selected)?;
+        cache::set_selected_output_devices(selected)?;
 
         self.update()
+    }
+
+    fn toggle_input_device(&self, id: String) -> Result<()> {
+        let mut selected = cache::get_selected_input_devices()?;
+        if let Some(index) = selected.iter().position(|(x, _)| x == &id) {
+            selected.remove(index);
+        } else {
+            let device = self.audio_interface.get_device(&id)?;
+            selected.push((id, device.volume()?));
+        }
+        cache::set_selected_input_devices(selected)?;
+
+        self.update()
+    }
+
+    fn device_clicked(&self, id: String) -> Result<()> {
+        let output_devices = self
+            .audio_interface
+            .get_output_devices()?
+            .into_iter()
+            .map(|d| d.id())
+            .collect::<Result<HashSet<_>>>()?;
+
+        if output_devices.contains(&id) {
+            self.toggle_output_device(id)
+        } else {
+            self.toggle_input_device(id)
+        }
     }
 
     fn handle(&mut self, event: TrayMenuEvent) -> Result<()> {
@@ -116,7 +170,9 @@ impl Handler {
         match event {
             TrayMenuEvent::TrayIconEvent(event) => {
                 if event.click_type == ClickType::Left {
-                    self.next_device().expect("next device failed");
+                    self.next_device()?;
+                } else {
+                    self.update()?;
                 }
             }
             TrayMenuEvent::MenuEvent(event) => {
@@ -125,6 +181,26 @@ impl Handler {
                 }
 
                 self.device_clicked(event.id.0)?;
+            }
+            TrayMenuEvent::Tick => {
+                self.apply_input_volume()?;
+            }
+        }
+
+        Ok(())
+    }
+
+    fn apply_input_volume(&self) -> Result<()> {
+        let input_devices = self.audio_interface.get_input_devices()?;
+        let selected = cache::get_selected_input_devices()?
+            .into_iter()
+            .collect::<HashMap<String, u8>>();
+
+        for device in input_devices {
+            if let Some(&volume) = selected.get(&device.id()?) {
+                if device.volume()? != volume {
+                    device.set_volume(volume)?;
+                }
             }
         }
 
@@ -136,6 +212,7 @@ impl Handler {
 enum TrayMenuEvent {
     TrayIconEvent(TrayIconEvent),
     MenuEvent(MenuEvent),
+    Tick,
 }
 
 fn main() -> Result<()> {
@@ -154,6 +231,14 @@ fn main() -> Result<()> {
             .send_event(TrayMenuEvent::MenuEvent(e))
             .expect("send event failed");
     }));
+
+    let proxy = event_loop.create_proxy();
+    thread::spawn(move || loop {
+        sleep(Duration::from_secs(1));
+        proxy
+            .send_event(TrayMenuEvent::Tick)
+            .expect("send event failed");
+    });
 
     let mut handler = Handler::new()?;
 
